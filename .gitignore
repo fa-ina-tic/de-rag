@@ -1,0 +1,8 @@
+## For index cache
+./.cache
+*.npy
+*.pkl
+
+## Python envs
+.venv
+venv
