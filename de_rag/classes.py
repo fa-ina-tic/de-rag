@@ -1,11 +1,11 @@
-from dataclasses import dataclass, field
-import numpy as np
+from dataclasses import dataclass
+from torch import Tensor
 
 @dataclass
 class Document:
     id: str
     text: str
-    embedding: np.ndarray
+    embedding: Tensor
     doc_type: str
 
 @dataclass

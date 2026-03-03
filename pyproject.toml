@@ -6,12 +6,20 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "datasets==3.6.0",
+    "faiss-cpu>=1.13.2",
     "numpy>=2.2.6",
     "pypdf>=6.7.3",
     "scikit-learn>=1.7.2",
     "sentence-transformers>=5.2.3",
-    "ty>=0.0.19",
 ]
 
 [tool.ty.environment]
 python = ".venv"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+    "ragas>=0.3.2",
+    "ruff>=0.15.4",
+    "ty>=0.0.19",
+]

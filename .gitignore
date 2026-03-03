@@ -6,3 +6,21 @@
 ## Python envs
 .venv
 venv
+
+## Project cache
+__pycache__
+**/__pycache__
+*/__pycache__
+.ruff_cache
+**/.ruff_cache
+
+## Sample Data
+sample
+sample/**
+
+## Project claude setting
+.claude
+claude.md
+
+## sample index
+**.faiss
