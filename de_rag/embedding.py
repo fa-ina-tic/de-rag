@@ -5,6 +5,9 @@ from typing import Dict, List, Optional
 from sentence_transformers import SentenceTransformer
 
 from de_rag.classes import Document
+from de_rag.logger import get_logger
+
+logger = get_logger(__name__)
 
 # ── Embedding ─────────────────────────────────────────────────────────────────
 
@@ -20,7 +23,7 @@ def embed_corpus(
         for d in doc_ids
     ]
 
-    print(f"[Embed] Encoding {len(texts):,} corpus documents ...")
+    logger.info("Encoding %d corpus documents ...", len(texts))
     embeddings = embedder.encode(
         texts,
         batch_size=batch_size,
@@ -49,19 +52,19 @@ def load_or_embed_corpus(
     cache_path is provided, saved for future runs.
     """
     if cache_path is not None and cache_path.exists():
-        print(f"[Cache] Loading embeddings from '{cache_path}' ...")
+        logger.info("Loading embeddings from '%s' ...", cache_path)
         with open(cache_path, "rb") as f:
             docs: List[Document] = pickle.load(f)
-        print(f"[Cache] Loaded {len(docs):,} documents.")
+        logger.info("Loaded %d documents from cache.", len(docs))
         return docs
 
     docs = embed_corpus(corpus, embedder, batch_size)
 
     if cache_path is not None:
-        print(f"[Cache] Saving embeddings to '{cache_path}' ...")
+        logger.info("Saving embeddings to '%s' ...", cache_path)
         cache_path.parent.mkdir(parents=True, exist_ok=True)
         with open(cache_path, "wb") as f:
             pickle.dump(docs, f)
-        print(f"[Cache] Saved {len(docs):,} documents.")
+        logger.info("Saved %d documents to cache.", len(docs))
 
     return docs

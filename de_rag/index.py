@@ -5,6 +5,10 @@ import faiss
 import numpy as np
 from typing import List, TYPE_CHECKING
 
+from de_rag.logger import get_logger
+
+logger = get_logger(__name__)
+
 if TYPE_CHECKING:
     from de_rag.classes import Document
 
@@ -136,6 +140,8 @@ def build(
 if __name__ == "__main__":
     import argparse
     from de_rag.dataloader import WikitextDataLoader
+    from de_rag.logger import setup_logging
+    setup_logging()
 
     parser = argparse.ArgumentParser(
         description="Build a FAISS HNSW index from Wikitext.",
@@ -150,4 +156,4 @@ if __name__ == "__main__":
 
     loader = WikitextDataLoader(name=args.dataset, split=args.split)
     idx = build(loader, model_name_or_path=args.model, output_path=args.output, chunk_size=args.chunk_size, overlap=args.overlap)
-    print(f"Done — {len(idx):,} vectors saved to '{args.output}'")
+    logger.info("Done — %d vectors saved to '%s'", len(idx), args.output)

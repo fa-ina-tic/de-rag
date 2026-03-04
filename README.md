@@ -139,3 +139,5 @@ The expectation is not “higher recall@k on BEIR”, but **better RAG quality m
   - many failed ideas committed with TODOs
 
 If you’re interested in collaborating or have ideas on embedding-structure-aware retrieval or non-LLM query decomposition, PRs and issues are welcome.
+
+## Reference Papers

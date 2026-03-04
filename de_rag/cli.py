@@ -25,6 +25,7 @@ python -m de_rag.cli \\
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 from pathlib import Path
 from typing import Dict, List
@@ -33,13 +34,17 @@ from sentence_transformers import SentenceTransformer
 
 from de_rag.classes import RetrievalResult
 from de_rag.index import HNSWIndex
-from de_rag.retriever import BaseRetriever, CosineRetriever, NonNegativeRetriever
+from de_rag.logger import get_logger, setup_logging
+from de_rag.retriever import BaseRetriever, CosineRetriever, NonNegativeRetriever, NERRetriever
+
+logger = get_logger("de_rag.cli")
 
 # ── Retriever registry ────────────────────────────────────────────────────────
 
 RETRIEVERS: Dict[str, type[BaseRetriever]] = {
     "cosine": CosineRetriever,
     "nonneg": NonNegativeRetriever,
+    "ner": NERRetriever
 }
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -47,52 +52,44 @@ RETRIEVERS: Dict[str, type[BaseRetriever]] = {
 def _load_index(index_path: Path) -> HNSWIndex:
     """Load a pre-built HNSWIndex (vectors + docs bundled in one file)."""
     if not index_path.exists():
-        print(f"error: index file '{index_path}' not found.", file=sys.stderr)
+        logger.error("Index file '%s' not found.", index_path)
         sys.exit(1)
 
-    print(f"[Index] Loading '{index_path}' ...")
+    logger.info("Loading index '%s' ...", index_path)
     index = HNSWIndex.load(str(index_path))
-    print(f"[Index] Ready — {len(index):,} vectors, {len(index.docs):,} documents.")
+    logger.info("Index ready — %d vectors, %d documents.", len(index), len(index.docs))
     return index
 
 
-def _build_retrievers(names: List[str], index: HNSWIndex) -> Dict[str, BaseRetriever]:
+def _build_retrievers(names: List[str], index: HNSWIndex, embedder: SentenceTransformer) -> Dict[str, BaseRetriever]:
     """Instantiate each requested retriever with the shared index."""
-    return {name: RETRIEVERS[name](index=index) for name in names}
+    return {name: RETRIEVERS[name](embedder=embedder, index=index) for name in names}
 
 
 def _print_results(name: str, results: List[RetrievalResult]) -> None:
     width = 72
-    print(f"\n{'=' * width}")
-    print(f"  Retriever : {name}")
-    print(f"{'─' * width}")
+    logger.info("  Retriever : %s", name)
+    logger.info("%s", "─" * width)
     if not results:
-        print("  (no results)")
+        logger.info("  (no results)")
     for rank, r in enumerate(results, start=1):
         score_str = f"{r.score:.4f}"
-        header = f"  [{rank}] score={score_str}  id={r.doc.id}"
-        print(header)
+        logger.info("  [%d] score=%s  id=%s", rank, score_str, r.doc.id)
         snippet = r.doc.text.replace("\n", " ")[:200]
         if len(r.doc.text) > 200:
             snippet += " …"
-        print(f"      {snippet}")
-    print(f"{'=' * width}")
+        logger.info("      %s", snippet)
+    logger.info("%s", "=" * width)
 
 
 def _run_query(
     query: str,
     retrievers: Dict[str, BaseRetriever],
-    embedder: SentenceTransformer,
     top_k: int,
 ) -> None:
-    query_emb = embedder.encode(
-        query,
-        convert_to_numpy=True,
-        normalize_embeddings=True,
-    )
     for name, retriever in retrievers.items():
         # retrieve() returns List[List[RetrievalResult]]; index [0] for single query
-        batch_results = retriever.retrieve(query_emb, top_k=top_k, source_label=name)
+        batch_results = retriever.retrieve(query, top_k=top_k, source_label=name)
         _print_results(name, batch_results[0])
 
 
@@ -101,7 +98,7 @@ def _interactive_loop(
     embedder: SentenceTransformer,
     top_k: int,
 ) -> None:
-    print("\nInteractive mode — type a query and press Enter.  Ctrl-C or 'q' to quit.")
+    logger.info("Interactive mode — type a query and press Enter.  Ctrl-C or 'q' to quit.")
     while True:
         try:
             query = input("\nQuery> ").strip()
@@ -112,7 +109,7 @@ def _interactive_loop(
             continue
         if query.lower() in {"q", "quit", "exit"}:
             break
-        _run_query(query, retrievers, embedder, top_k)
+        _run_query(query, retrievers, top_k)
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
@@ -163,7 +160,14 @@ def main() -> None:
         dest="top_k",
         help="Number of results per retriever.  (default: 5)",
     )
+    parser.add_argument(
+        "-v", "--verbose",
+        action="store_true",
+        help="Enable debug-level logging (shows NER masking details, etc.).",
+    )
     args = parser.parse_args()
+
+    setup_logging(level=logging.DEBUG if args.verbose else logging.INFO)
 
     retriever_names: List[str] = args.retrievers or ["cosine"]
 
@@ -171,16 +175,16 @@ def main() -> None:
     index = _load_index(args.index)
 
     # ── Load embedding model ──────────────────────────────────────────────────
-    print(f"[Model] Loading '{args.model}' ...")
+    logger.info("Loading model '%s' ...", args.model)
     embedder = SentenceTransformer(args.model)
 
     # ── Build retrievers ──────────────────────────────────────────────────────
-    retrievers = _build_retrievers(retriever_names, index)
+    retrievers = _build_retrievers(retriever_names, index, embedder)
 
     # ── One-shot or interactive ───────────────────────────────────────────────
     if args.query:
-        print(f'\n[Query] "{args.query}"')
-        _run_query(args.query, retrievers, embedder, args.top_k)
+        logger.info("Query: \"%s\"", args.query)
+        _run_query(args.query, retrievers, args.top_k)
     else:
         _interactive_loop(retrievers, embedder, args.top_k)
 
