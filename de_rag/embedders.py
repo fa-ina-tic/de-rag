@@ -100,7 +100,7 @@ class SentenceTransformerEmbedder(BaseEmbedder):
         )
 
     @property
-    def embedding_dim(self) -> int:
+    def embedding_dim(self) -> int | None:
         return self._model.get_sentence_embedding_dimension()
 
 
@@ -168,7 +168,7 @@ class CohereEmbedder(BaseEmbedder):
             Use ``"search_query"`` when encoding queries at retrieval time.
         """
         single = isinstance(texts, str)
-        text_list: List[str] = [texts] if single else list(texts)
+        text_list = [texts] if single else list(texts)
         effective_input_type = input_type or self._default_input_type
 
         # Cohere recommends ≤96 texts per request
@@ -183,7 +183,7 @@ class CohereEmbedder(BaseEmbedder):
                     len(text_list),
                 )
             response = self._client.embed(
-                texts=batch,
+                texts=batch,  # ty:ignore[invalid-argument-type]
                 model=self._model,
                 input_type=effective_input_type,
             )

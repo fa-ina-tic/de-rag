@@ -37,7 +37,7 @@ from typing import Dict, List
 
 from de_rag.classes import RetrievalResult
 from de_rag.embedders import BaseEmbedder, CohereEmbedder, SentenceTransformerEmbedder
-from de_rag.index import HNSWIndex
+from de_rag.index import FaissIndex
 from de_rag.logger import get_logger, setup_logging
 from de_rag.retriever import BaseRetriever, CosineRetriever, NonNegativeRetriever, NERRetriever
 
@@ -47,20 +47,19 @@ logger = get_logger("de_rag.cli")
 
 RETRIEVERS: Dict[str, type[BaseRetriever]] = {
     "cosine": CosineRetriever,
-    "nonneg": NonNegativeRetriever,
     "ner": NERRetriever
 }
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _load_index(index_path: Path) -> HNSWIndex:
-    """Load a pre-built HNSWIndex (vectors + docs bundled in one file)."""
+def _load_index(index_path: Path) -> FaissIndex:
+    """Load a pre-built FaissIndex (vectors + docs bundled in one file)."""
     if not index_path.exists():
         logger.error("Index file '%s' not found.", index_path)
         sys.exit(1)
 
     logger.info("Loading index '%s' ...", index_path)
-    index = HNSWIndex.load(str(index_path))
+    index = FaissIndex.load(str(index_path))
     logger.info("Index ready — %d vectors, %d documents.", len(index), len(index.docs))
     return index
 
@@ -77,7 +76,7 @@ def _build_embedder(args: argparse.Namespace) -> BaseEmbedder:
     return SentenceTransformerEmbedder(args.model)
 
 
-def _build_retrievers(names: List[str], index: HNSWIndex, embedder: BaseEmbedder) -> Dict[str, BaseRetriever]:
+def _build_retrievers(names: List[str], index: FaissIndex, embedder: BaseEmbedder) -> Dict[str, BaseRetriever]:
     """Instantiate each requested retriever with the shared index."""
     return {name: RETRIEVERS[name](embedder=embedder, index=index) for name in names}
 

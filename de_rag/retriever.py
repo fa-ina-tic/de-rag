@@ -5,24 +5,24 @@ from abc import ABC, abstractmethod
 from typing import List, Optional, TYPE_CHECKING
 from de_rag.classes import Document, RetrievalResult
 from de_rag.embedders import BaseEmbedder
-from de_rag.index import HNSWIndex
+from de_rag.index import FaissIndex
 from de_rag.logger import get_logger
 
 logger = get_logger(__name__)
 
 
 class BaseRetriever(ABC):
-    """Base retriever backed by an HNSWIndex.
+    """Base retriever backed by an FaissIndex.
 
     The index can be supplied at construction time or overridden per-call.
-    Document management (add_documents) is handled entirely by HNSWIndex.
+    Document management (add_documents) is handled entirely by FaissIndex.
     """
 
-    def __init__(self, embedder: BaseEmbedder, index: Optional[HNSWIndex] = None, ):
+    def __init__(self, embedder: BaseEmbedder, index: Optional[FaissIndex] = None, ):
         self.index = index
         self.embedder = embedder
 
-    def _resolve(self, index: Optional[HNSWIndex]):
+    def _resolve(self, index: Optional[FaissIndex]):
         idx = index or self.index
         if not self.index:
             self.index = index
@@ -38,7 +38,7 @@ class BaseRetriever(ABC):
         query: str|List[str],
         top_k: int = 5,
         source_label: str = "",
-        index: Optional[HNSWIndex] = None,
+        index: Optional[FaissIndex] = None,
         **kwargs,
     ) -> List[List[RetrievalResult]]:
         """Search for one or more queries.
@@ -47,7 +47,7 @@ class BaseRetriever(ABC):
         ----------
         query : np.ndarray
             Shape (dim,) for a single query or (N, dim) for a batch.
-        index : HNSWIndex, optional
+        index : FaissIndex, optional
             Overrides the instance-level index for this call.
 
         Returns
@@ -56,9 +56,9 @@ class BaseRetriever(ABC):
         """
         self._resolve(index)
         assert self.index is not None
-        query = self._preprocess(query)
+        query_embeds = self._preprocess(query)
         logger.debug("Searching index with top_k=%d, retriever=%s", top_k, source_label or type(self).__name__)
-        distances, raw_indices = self.index.search(query, k=top_k)
+        distances, raw_indices = self.index.search(query_embeds, k=top_k)
         docs = self.index.docs
         return [
             [
@@ -74,7 +74,7 @@ class BaseRetriever(ABC):
         ]
 
     def batch_query(
-        self, queries: np.ndarray, **kwargs
+        self, queries: str|List[str], **kwargs
     ) -> List[List[RetrievalResult]]:
         """Alias for retrieve."""
         return self.retrieve(queries, **kwargs)
@@ -99,7 +99,7 @@ class NERRetriever(BaseRetriever):
 
     def __init__(self,
                 embedder: BaseEmbedder,
-                index: Optional[HNSWIndex] = None,
+                index: Optional[FaissIndex] = None,
                 ner_model_name_or_path: str = "urchade/gliner_multi-v2.1"):
         super().__init__(embedder, index)
         ## Check dependencies and arguments
