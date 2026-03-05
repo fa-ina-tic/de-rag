@@ -147,9 +147,7 @@ class CohereEmbedder(BaseEmbedder):
                 "Package 'cohere' is not installed. "
                 "Run 'pip install cohere' to use CohereEmbedder."
             )
-        import httpx
-        client = httpx.Client(verify=False)
-        self._client = cohere.Client(api_key, httpx_client=client) if api_key else cohere.Client(httpx_client=client)
+        self._client = cohere.Client(api_key) if api_key else cohere.Client()
         self._model = model
         self._default_input_type = input_type
         self._dim: int | None = None
