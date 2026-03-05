@@ -11,6 +11,7 @@ Supported backends
 
 from __future__ import annotations
 
+import time
 from abc import ABC, abstractmethod
 from typing import List, Union
 
@@ -135,6 +136,7 @@ class CohereEmbedder(BaseEmbedder):
         api_key: str | None = None,
         model: str = "embed-english-v3.0",
         input_type: str = "search_document",
+        requests_per_minute: int = 40,
     ) -> None:
         try:
             import cohere
@@ -143,12 +145,15 @@ class CohereEmbedder(BaseEmbedder):
                 "Package 'cohere' is not installed. "
                 "Run 'pip install cohere' to use CohereEmbedder."
             )
-
-        self._client = cohere.Client(api_key) if api_key else cohere.Client()
+        import httpx
+        client = httpx.Client(verify=False)
+        self._client = cohere.Client(api_key, httpx_client=client) if api_key else cohere.Client(httpx_client=client)
         self._model = model
         self._default_input_type = input_type
         self._dim: int | None = None
-        logger.info("Initialized CohereEmbedder with model '%s'", model)
+        self._min_interval = 60.0 / max(1, requests_per_minute)
+        self._last_request_time: float = 0.0
+        logger.info("Initialized CohereEmbedder with model '%s' (%.1f req/min limit)", model, requests_per_minute)
 
     def encode(
         self,
@@ -182,11 +187,33 @@ class CohereEmbedder(BaseEmbedder):
                     start + len(batch),
                     len(text_list),
                 )
-            response = self._client.embed(
-                texts=batch,  # ty:ignore[invalid-argument-type]
-                model=self._model,
-                input_type=effective_input_type,
-            )
+            # Rate-limit: enforce minimum interval between requests
+            elapsed = time.monotonic() - self._last_request_time
+            wait = self._min_interval - elapsed
+            if wait > 0:
+                logger.debug("Rate limiting: sleeping %.2fs before Cohere request", wait)
+                time.sleep(wait)
+
+            # Retry with exponential backoff on 429
+            for attempt in range(5):
+                try:
+                    self._last_request_time = time.monotonic()
+                    response = self._client.embed(
+                        texts=batch,  # ty:ignore[invalid-argument-type]
+                        model=self._model,
+                        input_type=effective_input_type,
+                    )
+                    break
+                except Exception as exc:
+                    if "429" in str(type(exc)) or "TooManyRequests" in type(exc).__name__:
+                        backoff = 2 ** attempt * 5
+                        logger.warning("Cohere 429 on attempt %d; retrying in %ds", attempt + 1, backoff)
+                        time.sleep(backoff)
+                    else:
+                        raise
+            else:
+                raise RuntimeError("Cohere embed failed after 5 retries due to rate limiting")
+
             batch_arr = np.array(response.embeddings, dtype=np.float32)
             all_embeddings.append(batch_arr)
 
