@@ -14,8 +14,15 @@ dependencies = [
     "sentence-transformers>=5.2.3",
 ]
 
+[tool.setuptools.packages.find]
+include = ["de_rag*"]
+
 [tool.ty.environment]
 python = ".venv"
+
+[tool.pytest.ini_options]
+addopts = ["--import-mode=importlib"]
+pythonpath = "de_rag"
 
 [dependency-groups]
 dev = [

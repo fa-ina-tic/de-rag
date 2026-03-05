@@ -14,17 +14,11 @@ __pycache__
 */__pycache__
 .ruff_cache
 **/.ruff_cache
+*.egg-info
 
-<<<<<<< HEAD
 ## Sample Data
 sample
 sample/**
-=======
-# Sample index
-sample
-sample/*
-**/sample
->>>>>>> dce01b0 (Integrate embedding module in one file)
 
 ## Project claude setting
 .claude
