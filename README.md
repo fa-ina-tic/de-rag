@@ -85,6 +85,15 @@ but allows **multi-layer retrieval** by only changing how we build/query vectors
 
 ---
 
+### 3. Decompose full query hidden states before using
+Standard dense retrieval encodes a query into a single vector, which struggles with complex, multi-faceted queries where a single vector cannot simultaneously represent all the semantic aspects needed to retrieve relevant documents. Instead of generating textual sub-queries with an LLM or storing per-token vectors like ColBERT, we propose decomposing the query embedding directly into multiple orthogonal aspect vectors using a Hadamard rotation — with no retraining and no additional generation step.
+
+Given the token-level hidden states from the final layer of the embedding model, we apply an attention-weighted mean pool to obtain a single query representation, then rotate it into the Hadamard space where correlated dimensions are disentangled. We split the rotated vector into nn
+n equal-sized blocks, each corresponding to an orthogonal semantic axis, and project each block back into the original embedding space to produce nn
+n full-dimensional aspect vectors. Each aspect vector is then used independently for retrieval against the document index, and results are merged via Reciprocal Rank Fusion (RRF). This approach produces a fixed number of diverse, semantically distinct query vectors that collectively cover more retrieval intents than a single pooled embedding.
+
+---
+
 ## Evaluation
 
 Off-the-shelf IR benchmarks like **BEIR** are not a great fit here, because they mostly assume:
