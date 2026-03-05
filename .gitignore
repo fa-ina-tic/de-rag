@@ -2,6 +2,7 @@
 ./.cache
 *.npy
 *.pkl
+**/.pytest_cache
 
 ## Python envs
 .venv
