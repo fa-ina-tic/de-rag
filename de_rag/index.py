@@ -1,10 +1,10 @@
 import pickle
-from typing import List, TYPE_CHECKING
+from typing import List, TYPE_CHECKING, Union
 
 import faiss
 import numpy as np
-from sentence_transformers import SentenceTransformer
 
+from de_rag.embedders import BaseEmbedder, SentenceTransformerEmbedder
 from de_rag.logger import get_logger
 
 logger = get_logger(__name__)
@@ -188,7 +188,7 @@ def chunk_texts(texts: List[str], chunk_size: int, overlap: int) -> List[str]:
 
 def build(
     dataloader,
-    model_name_or_path: str,
+    embedder: Union[BaseEmbedder, str],
     output_path: str,
     factory_string: str = "HNSW32",
     metric: int | str = faiss.METRIC_L2,
@@ -201,8 +201,9 @@ def build(
     ----------
     dataloader : BaseDataLoader
         Any iterable that yields raw text strings.
-    model_name_or_path : str
-        SentenceTransformer model name or local path.
+    embedder : BaseEmbedder or str
+        A :class:`~de_rag.embedders.BaseEmbedder` instance, or a model name /
+        local path string (interpreted as a :class:`~de_rag.embedders.SentenceTransformerEmbedder`).
     output_path : str
         File path where the index will be saved.
     factory_string : str
@@ -223,21 +224,17 @@ def build(
     """
     from de_rag.classes import Document
 
-    embedder = SentenceTransformer(model_name_or_path)
-    dim = embedder.get_sentence_embedding_dimension()
-    if not dim:
-        raise ValueError("Could not determine embedding dimension from model.")
+    if isinstance(embedder, str):
+        embedder = SentenceTransformerEmbedder(embedder)
 
     texts = list(dataloader)
     if chunk_size is not None:
         texts = chunk_texts(texts, chunk_size=chunk_size, overlap=overlap)
 
-    embeddings = embedder.encode(
-        texts,
-        normalize_embeddings=True,
-        show_progress_bar=True,
-        convert_to_numpy=True,
-    )
+    embeddings = embedder.encode(texts, show_progress=True, normalize=True)
+    embeddings = np.atleast_2d(embeddings).astype(np.float32)
+
+    dim = embeddings.shape[1]
 
     docs = [
         Document(id=str(i), text=text, embedding=emb, doc_type="text")
@@ -277,7 +274,15 @@ if __name__ == "__main__":
             "print(*available_index_classes(), sep=chr(10))\"' for the full list."
         ),
     )
-    parser.add_argument("--model", required=True, help="SentenceTransformer model name or path.")
+    parser.add_argument(
+        "--embedder",
+        default="sentence-transformers",
+        choices=["sentence-transformers", "cohere"],
+        help="Embedding backend. (default: sentence-transformers)",
+    )
+    parser.add_argument("--model", default=None, help="Model name or path. Defaults: all-MiniLM-L6-v2 (ST), embed-english-v3.0 (Cohere).")
+    parser.add_argument("--cohere-api-key", default=None, metavar="KEY", help="Cohere API key (or set COHERE_API_KEY env var).")
+    parser.add_argument("--device", default=None, help="PyTorch device for SentenceTransformer (e.g. cpu, cuda).")
     parser.add_argument("--output", required=True, metavar="PATH", help="Output file path.")
     parser.add_argument(
         "--factory",
@@ -297,10 +302,22 @@ if __name__ == "__main__":
     parser.add_argument("--overlap", type=int, default=0, metavar="N", help="Token overlap between consecutive chunks. (default: 0)")
     args = parser.parse_args()
 
+    if args.embedder == "cohere":
+        from de_rag.embedders import CohereEmbedder
+        embedder: BaseEmbedder = CohereEmbedder(
+            api_key=args.cohere_api_key,
+            model=args.model or "embed-english-v3.0",
+        )
+    else:
+        embedder = SentenceTransformerEmbedder(
+            model_name_or_path=args.model or "sentence-transformers/all-MiniLM-L6-v2",
+            device=args.device,
+        )
+
     loader = WikitextDataLoader(name=args.dataset, split=args.split)
     idx = build(
         loader,
-        model_name_or_path=args.model,
+        embedder=embedder,
         output_path=args.output,
         factory_string=args.factory,
         metric=args.metric,
