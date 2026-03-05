@@ -40,23 +40,26 @@ The main directions we’re experimenting with:
 
 ## Methods
 
-### 1. Query decomposition (non-LLM)
+### 1. NER-based keyword manipulation
 
-Goal: split a user query into sub-queries that target different information layers (global vs local) without running a big LLM before the first answer.
+To avoid full-blown LLM query rewriting, we can lean on lightweight NER like **GLiNER** to detect entities/keywords in the query.
 
-Ideas:
+Example (Korean labor-law query):
 
-- Use basic heuristics / rules / small models over:
-  - original text query
-  - its embedding vector
-- Generate multiple query variants per user query:
-  - one that is more “broad” or abstract (global context retrieval)
-  - one that is more “literal” or detailed (local evidence retrieval)
-- Send these as **separate searches** to the same vector DB and then merge/score results downstream.
+![NERImage](./assets/NER-based_keyword_manipulation.png)
 
-Trade-off:  
-- LLM-based query rewriting usually gives nicer decompositions, but adds noticeable latency and cost.  
-- Here we explicitly try to **avoid LLM pre-processing** in the retrieval path.
+- Original:  
+  `근로노동자가 법정 근로시간을 준수하지 않은 경우`
+- Possible variants:
+  - `<BLANK>가 법정 근로시간을 준수하지 않은 경우`
+  - `근로노동자가 <BLANK>을 준수하지 않은 경우`
+  - `근로노동자 법정 근로시간`
+
+Possible use cases:
+
+- Remove/skew specific entities to **broaden** the query and favor more general background sections.
+- Keep entity-focused variants for **local** retrieval (specific case law, specific clause, etc.).
+- Combine NER-driven variants with embedding masking for more controlled search behavior.
 
 ---
 
@@ -79,27 +82,6 @@ This keeps:
 - same vector DB
 
 but allows **multi-layer retrieval** by only changing how we build/query vectors.
-
----
-
-### 3. NER-based keyword manipulation
-
-To avoid full-blown LLM query rewriting, we can lean on lightweight NER like **GLiNER** to detect entities/keywords in the query.
-
-Example (Korean labor-law query):
-
-- Original:  
-  `근로노동자가 법정 근로시간을 준수하지 않은 경우`
-- Possible variants:
-  - `<BLANK>가 법정 근로시간을 준수하지 않은 경우`
-  - `근로노동자가 <BLANK>을 준수하지 않은 경우`
-  - `근로노동자 법정 근로시간`
-
-Possible use cases:
-
-- Remove/skew specific entities to **broaden** the query and favor more general background sections.
-- Keep entity-focused variants for **local** retrieval (specific case law, specific clause, etc.).
-- Combine NER-driven variants with embedding masking for more controlled search behavior.
 
 ---
 
@@ -139,5 +121,7 @@ The expectation is not “higher recall@k on BEIR”, but **better RAG quality m
   - many failed ideas committed with TODOs
 
 If you’re interested in collaborating or have ideas on embedding-structure-aware retrieval or non-LLM query decomposition, PRs and issues are welcome.
+
+---
 
 ## Reference Papers

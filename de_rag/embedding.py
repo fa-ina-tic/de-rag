@@ -2,9 +2,8 @@ import pickle
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from sentence_transformers import SentenceTransformer
-
 from de_rag.classes import Document
+from de_rag.embedders import BaseEmbedder
 from de_rag.logger import get_logger
 
 logger = get_logger(__name__)
@@ -13,7 +12,7 @@ logger = get_logger(__name__)
 
 def embed_corpus(
     corpus: Dict,
-    embedder: SentenceTransformer,
+    embedder: BaseEmbedder,
     batch_size: int = 64,
 ) -> List[Document]:
     """Encode all corpus documents and wrap them in Document objects."""
@@ -27,9 +26,8 @@ def embed_corpus(
     embeddings = embedder.encode(
         texts,
         batch_size=batch_size,
-        show_progress_bar=True,
-        convert_to_numpy=True,
-        normalize_embeddings=True,
+        show_progress=True,
+        normalize=True,
     )
 
     return [
@@ -40,7 +38,7 @@ def embed_corpus(
 
 def load_or_embed_corpus(
     corpus: Dict,
-    embedder: SentenceTransformer,
+    embedder: BaseEmbedder,
     cache_path: Optional[Path],
     batch_size: int = 64,
 ) -> List[Document]:

@@ -11,10 +11,15 @@ The index file bundles both the FAISS vectors and document metadata.
 
 Usage examples
 --------------
-# one-shot query
+# one-shot query with local SentenceTransformer (default)
 python -m de_rag.cli "CRISPR mechanism" \\
     --index wikitext.faiss \\
     --retriever cosine --retriever nonneg
+
+# use Cohere embeddings
+python -m de_rag.cli "CRISPR mechanism" \\
+    --index wikitext.faiss \\
+    --embedder cohere --cohere-model embed-english-v3.0
 
 # interactive REPL (omit the query argument)
 python -m de_rag.cli \\
@@ -30,9 +35,8 @@ import sys
 from pathlib import Path
 from typing import Dict, List
 
-from sentence_transformers import SentenceTransformer
-
 from de_rag.classes import RetrievalResult
+from de_rag.embedders import BaseEmbedder, CohereEmbedder, SentenceTransformerEmbedder
 from de_rag.index import HNSWIndex
 from de_rag.logger import get_logger, setup_logging
 from de_rag.retriever import BaseRetriever, CosineRetriever, NonNegativeRetriever, NERRetriever
@@ -61,7 +65,19 @@ def _load_index(index_path: Path) -> HNSWIndex:
     return index
 
 
-def _build_retrievers(names: List[str], index: HNSWIndex, embedder: SentenceTransformer) -> Dict[str, BaseRetriever]:
+def _build_embedder(args: argparse.Namespace) -> BaseEmbedder:
+    """Instantiate the embedder selected by --embedder."""
+    if args.embedder == "cohere":
+        return CohereEmbedder(
+            api_key=args.cohere_api_key or None,
+            model=args.cohere_model,
+            input_type="search_query",
+        )
+    # default: sentence-transformers
+    return SentenceTransformerEmbedder(args.model)
+
+
+def _build_retrievers(names: List[str], index: HNSWIndex, embedder: BaseEmbedder) -> Dict[str, BaseRetriever]:
     """Instantiate each requested retriever with the shared index."""
     return {name: RETRIEVERS[name](embedder=embedder, index=index) for name in names}
 
@@ -95,7 +111,6 @@ def _run_query(
 
 def _interactive_loop(
     retrievers: Dict[str, BaseRetriever],
-    embedder: SentenceTransformer,
     top_k: int,
 ) -> None:
     logger.info("Interactive mode — type a query and press Enter.  Ctrl-C or 'q' to quit.")
@@ -148,11 +163,33 @@ def main() -> None:
             f"Choices: {', '.join(RETRIEVERS)}.  (default: cosine)"
         ),
     )
-    parser.add_argument(
+
+    # ── Embedder selection ────────────────────────────────────────────────────
+    emb_group = parser.add_argument_group("embedder")
+    emb_group.add_argument(
+        "--embedder",
+        choices=["sentence-transformers", "cohere"],
+        default="sentence-transformers",
+        help="Embedding backend to use.  (default: sentence-transformers)",
+    )
+    emb_group.add_argument(
         "--model",
         default="sentence-transformers/all-MiniLM-L6-v2",
         help="SentenceTransformer model name/path.  (default: all-MiniLM-L6-v2)",
     )
+    emb_group.add_argument(
+        "--cohere-model",
+        default="embed-english-v3.0",
+        dest="cohere_model",
+        help="Cohere embed model name.  (default: embed-english-v3.0)",
+    )
+    emb_group.add_argument(
+        "--cohere-api-key",
+        default=None,
+        dest="cohere_api_key",
+        help="Cohere API key.  Falls back to COHERE_API_KEY env var if omitted.",
+    )
+
     parser.add_argument(
         "--top-k",
         type=int,
@@ -175,8 +212,8 @@ def main() -> None:
     index = _load_index(args.index)
 
     # ── Load embedding model ──────────────────────────────────────────────────
-    logger.info("Loading model '%s' ...", args.model)
-    embedder = SentenceTransformer(args.model)
+    logger.info("Initializing embedder '%s' ...", args.embedder)
+    embedder = _build_embedder(args)
 
     # ── Build retrievers ──────────────────────────────────────────────────────
     retrievers = _build_retrievers(retriever_names, index, embedder)
@@ -186,7 +223,7 @@ def main() -> None:
         logger.info("Query: \"%s\"", args.query)
         _run_query(args.query, retrievers, args.top_k)
     else:
-        _interactive_loop(retrievers, embedder, args.top_k)
+        _interactive_loop(retrievers, args.top_k)
 
 
 if __name__ == "__main__":
