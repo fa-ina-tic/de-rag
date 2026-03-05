@@ -39,14 +39,15 @@ from de_rag.classes import RetrievalResult
 from de_rag.embedders import BaseEmbedder, CohereEmbedder, SentenceTransformerEmbedder
 from de_rag.index import FaissIndex
 from de_rag.logger import get_logger, setup_logging
-from de_rag.retriever import BaseRetriever, CosineRetriever, NonNegativeRetriever, NERRetriever
+from de_rag.retriever import BaseRetriever, SimpleRetriever, NonNegativeRetriever, NERRetriever
 
 logger = get_logger("de_rag.cli")
 
 # ── Retriever registry ────────────────────────────────────────────────────────
 
 RETRIEVERS: Dict[str, type[BaseRetriever]] = {
-    "cosine": CosineRetriever,
+    "simple": SimpleRetriever,
+    "nonneg": NonNegativeRetriever,
     "ner": NERRetriever
 }
 
@@ -103,9 +104,9 @@ def _run_query(
     top_k: int,
 ) -> None:
     for name, retriever in retrievers.items():
-        # retrieve() returns List[List[RetrievalResult]]; index [0] for single query
         batch_results = retriever.retrieve(query, top_k=top_k, source_label=name)
-        _print_results(name, batch_results[0])
+        all_results = [r for results in batch_results for r in results]
+        _print_results(name, all_results)
 
 
 def _interactive_loop(

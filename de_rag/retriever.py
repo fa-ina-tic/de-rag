@@ -79,13 +79,10 @@ class BaseRetriever(ABC):
         """Alias for retrieve."""
         return self.retrieve(queries, **kwargs)
 
-
-class CosineRetriever(BaseRetriever):
-    """Retriever with no query-side transformation."""
+class SimpleRetriever(BaseRetriever):
 
     def _preprocess(self, query, *args) -> np.ndarray:
         return self.embedder.encode(query, show_progress=False, normalize=True)
-
 
 class NonNegativeRetriever(BaseRetriever):
     """Retriever that zeros out negative query dimensions before searching."""
@@ -114,7 +111,7 @@ class NERRetriever(BaseRetriever):
         self.ner_model = GLiNER.from_pretrained(ner_model_name_or_path)
         self.embedder = embedder
 
-    def _mask_query(self, query: str, labels: List[str] = ["subject", "object"]) -> List[str]:
+    def _mask_query(self, query: str, labels: List[str] = ["person", "organization", "action", "date"]) -> List[str]:
         entities = self.ner_model.predict_entities(query, labels)
         logger.debug("NER predict_entities found %d entities for query: '%s'", len(entities), query)
         queries: List[str] = []
@@ -125,6 +122,12 @@ class NERRetriever(BaseRetriever):
         if not queries:
             logger.debug("No entities detected — using original query")
             queries = [query]
+        queries.append(" ".join(entity["text"] for entity in entities))
+        
+        logger.debug("Expanded Query", )
+        for query in queries:
+            logger.debug("Query: %s", query)
+
         return queries
 
     def _preprocess(self, query, *args) -> np.ndarray:
